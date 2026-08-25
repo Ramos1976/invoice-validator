@@ -15,8 +15,8 @@ Rådmansgatan 40
 113 57 Stockholm, Sweden
 Supplier Job Due Date
 Abimael Secco Peixoto United Kingdom Personal 06/02/2026
-1 Maintenance- Jan - TestBank 999 EUR 999 EUR
-17 Total 999.00EUR
+1 Maintenance- Jan - TestBank 240 EUR 240 EUR
+17 Total 240.00EUR
 IBAN: XX2222222222
 BIC/SwiftCode: XXXXXXX
 """

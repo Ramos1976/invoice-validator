@@ -32,3 +32,20 @@ def check_against_sheet(record: dict | None, invoice_number: str, invoice_amount
         issues.append("Could not compare amounts against sheet")
 
     return issues
+
+def find_record(records: list[dict], tester_name: str, month: str) -> dict | None:
+    normalized_input = norm.normalize_text(tester_name)
+
+    # Exact match first
+    for r in records:
+        if norm.normalize_text(r["tester_name"]) == normalized_input and r["month"] == month:
+            return r
+
+    # Fallback: partial match (all words in the typed name appear in the sheet name)
+    input_words = set(normalized_input.split())
+    for r in records:
+        sheet_words = set(norm.normalize_text(r["tester_name"]).split())
+        if input_words.issubset(sheet_words) and r["month"] == month:
+            return r
+
+    return None
