@@ -1,0 +1,31 @@
+import re
+
+def parse(text: str) -> dict:
+    invoice_number = re.search(r"INVOICE\s+(\S+)\s*\n", text)
+    invoice_date = re.search(r"Date:\s*(\d{2}/\d{2}/\d{4})", text)
+    due_date = re.search(r"Supplier\s+Job\s+Due Date\s*\n.*?(\d{2}/\d{2}/\d{4})", text)
+    addressee = re.search(r"To\s+c/o\s+(.*?)\n(.*?)\nSupplier\s+Job\s+Due Date", text, re.DOTALL)
+
+    # Description block sits between the header row and "VAT" or "Total"
+    desc_block = re.search(
+        r"Qty\s+Description\s+Unit Price\s+Line\s*\n(.*?)\n\s*VAT",
+        text, re.DOTALL,
+    )
+    total = re.search(r"Total\s+([\d.,]+)\s*EUR", text)
+    iban = re.search(r"IBAN\s*(\S+)", text)
+    bic = re.search(r"BIC\s*(\S+)", text)
+
+    return {
+        "template": "tester_2",
+        "invoice_number": invoice_number.group(1) if invoice_number else None,
+        "invoice_date": invoice_date.group(1) if invoice_date else None,
+        "due_date": due_date.group(1) if due_date else None,
+        "approver_name": addressee.group(1).strip() if addressee else None,
+        "company_block": addressee.group(2).strip() if addressee else None,
+        "description_block": desc_block.group(1).strip() if desc_block else None,
+        "total": total.group(1) if total else None,
+        "bank_details": {
+            "iban": iban.group(1) if iban else None,
+            "bic": bic.group(1) if bic else None,
+        },
+    }

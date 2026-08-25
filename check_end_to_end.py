@@ -1,0 +1,47 @@
+from extraction.pdf_reader import read_pdf_text
+from extraction.template_detector import detect_template
+from extraction.parsers import tester_1_parser, tester_2_parser
+from validation import rules, normalizers as norm
+from validation.decision import decide
+
+invoice_text = read_pdf_text("sample_tester1.pdf")
+
+template = detect_template(invoice_text)
+print(f"Detected template: {template}")
+
+if template == "tester_1":
+    fields = tester_1_parser.parse(invoice_text)
+elif template == "tester_2":
+    fields = tester_2_parser.parse(invoice_text)
+else:
+    print("Unknown template — would be flagged REVIEW_REQUIRED here, stopping.")
+    fields = None
+
+if fields:
+    print("\n--- Extracted fields ---")
+    for key, value in fields.items():
+        print(f"{key}: {value}")
+
+    issues = []
+    issues.append(rules.check_invoice_number_format(fields["invoice_number"]))
+    issues.append(rules.check_addressee(fields["approver_name"]))
+
+    try:
+        invoice_date = norm.normalize_date(fields["invoice_date"])
+        due_date = norm.normalize_date(fields["due_date"])
+        issues.append(rules.check_due_date(invoice_date, due_date))
+    except ValueError as e:
+        issues.append(f"Could not parse dates for due-date check: {e}")
+
+    for item in fields["line_items"]:
+        issues.append(rules.check_description_pattern(item["description"]))
+
+    issues.append(rules.check_line_items_sum_to_total(fields["line_items"], fields["total"]))
+    issues.append(rules.check_bank_details_present(fields["bank_details"]))
+
+    issues = [i for i in issues if i is not None]
+    status, final_issues = decide(issues)
+
+    print("\n--- Validation result ---")
+    print("Status:", status)
+    print("Issues:", final_issues if final_issues else "None")
