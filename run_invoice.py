@@ -26,31 +26,42 @@ def extract_month(description: str) -> str | None:
             return canonical
     return None
 
-def run(pdf_path: str):
-    print(f"=== Processing {pdf_path} ===")
+def process_invoice(pdf_path: str, tester_name_override: str | None = None) -> dict:
+    """Runs the full pipeline and returns a result dict instead of printing.
+    tester_name_override lets a caller (like the UI) supply a name when
+    automatic extraction fails, instead of relying on input()."""
+    result = {
+        "pdf_path": pdf_path,
+        "template": None,
+        "fields": None,
+        "tester_name": None,
+        "tester_name_needs_input": False,
+        "status": None,
+        "issues": [],
+        "email_draft": None,
+    }
+
     invoice_text = read_pdf_text(pdf_path)
     template = detect_template(invoice_text)
-    print(f"Detected template: {template}")
+    result["template"] = template
 
     conn = get_connection(AUDIT_DB_PATH)
 
     if template == "unknown":
         status, final_issues = decide(["Unrecognized invoice template — manual review required"])
-        print("\n--- Result ---")
-        print("Status:", status, "| Issues:", final_issues)
+        result["status"] = status
+        result["issues"] = final_issues
         log_run(conn, None, None, status.value, final_issues, "N/A")
-        return
+        return result
 
     fields = tester_1_parser.parse(invoice_text) if template == "tester_1" else tester_2_parser.parse(invoice_text)
-
-    print("\n--- Extracted fields ---")
-    for key, value in fields.items():
-        print(f"{key}: {value}")
+    result["fields"] = fields
 
     issues = []
     issues.append(rules.check_invoice_number_format(fields["invoice_number"]))
     issues.append(rules.check_addressee(fields["approver_name"]))
 
+    invoice_date = None
     try:
         invoice_date = norm.normalize_date(fields["invoice_date"])
         due_date = norm.normalize_date(fields["due_date"])
@@ -65,12 +76,14 @@ def run(pdf_path: str):
             issues.append(rules.check_description_pattern(item["description"]))
         issues.append(rules.check_line_items_sum_to_total(fields["line_items"], fields["total"]))
 
-    # --- Spreadsheet check ---
-    tester_name = fields.get("tester_name")
+    tester_name = tester_name_override or fields.get("tester_name")
     if not tester_name:
-        tester_name = input("\nCould not extract tester name automatically. Please enter it manually: ").strip()
-    else:
-        print(f"\nExtracted tester name: {tester_name}")
+        result["tester_name_needs_input"] = True
+        result["issues"] = ["Tester name could not be extracted — manual input required"]
+        result["status"] = Status.REVIEW_REQUIRED
+        return result
+
+    result["tester_name"] = tester_name
     sheet_records = parse_tester_month_records(SHEET_CSV_PATH)
 
     if template == "tester_1":
@@ -81,26 +94,24 @@ def run(pdf_path: str):
                 continue
             record = find_record(sheet_records, tester_name, month)
             issues.extend(check_against_sheet(record, fields["invoice_number"], item["amount"]))
-            duplicate_issue = check_duplicate(record, fields["invoice_number"])
-            if duplicate_issue:
-                issues.append(duplicate_issue)
+            dup = check_duplicate(record, fields["invoice_number"])
+            if dup:
+                issues.append(dup)
     else:
         month = extract_month(fields.get("description_block", "")) or "Jan"
         record = find_record(sheet_records, tester_name, month)
         issues.extend(check_against_sheet(record, fields["invoice_number"], fields["total"]))
-        duplicate_issue = check_duplicate(record, fields["invoice_number"])
-        if duplicate_issue:
-            issues.append(duplicate_issue)
+        dup = check_duplicate(record, fields["invoice_number"])
+        if dup:
+            issues.append(dup)
 
     issues = [i for i in issues if i is not None]
-    issues = list(dict.fromkeys(issues))  # removes exact duplicates, keeps order
+    issues = list(dict.fromkeys(issues))
     status, final_issues = decide(issues)
+    result["status"] = status
+    result["issues"] = final_issues
 
-    print("\n--- Validation result ---")
-    print("Status:", status)
-    print("Issues:", final_issues if final_issues else "None")
-
-    if status == Status.VALID:
+    if status == Status.VALID and invoice_date:
         draft = build_draft(
             invoice_number=fields["invoice_number"],
             tester_name=tester_name,
@@ -110,19 +121,43 @@ def run(pdf_path: str):
             to=EMAIL_TO,
             cc=EMAIL_CC,
         )
-        print("\n--- Email draft (NOT sent) ---")
-        print("To:", draft.to, "| CC:", draft.cc)
-        print("Subject:", draft.subject)
-        print("Body:", draft.body)
-        print("Attachment:", draft.attachment_filename)
-    else:
-        print("\nNo email drafted — flagged for manual review, nothing sent.")
+        result["email_draft"] = draft
 
     log_run(conn, fields["invoice_number"], tester_name, status.value, final_issues, tester_name)
-    print("\nLogged to audit database.")
+    return result
+
+
+def run_from_terminal(pdf_path: str):
+    """Terminal-friendly wrapper: calls process_invoice and prints the result,
+    handling the manual tester-name prompt if needed."""
+    result = process_invoice(pdf_path)
+
+    if result["tester_name_needs_input"]:
+        manual_name = input("\nCould not extract tester name automatically. Please enter it manually: ").strip()
+        result = process_invoice(pdf_path, tester_name_override=manual_name)
+
+    print(f"=== Processing {pdf_path} ===")
+    print(f"Detected template: {result['template']}")
+    if result["fields"]:
+        print("\n--- Extracted fields ---")
+        for key, value in result["fields"].items():
+            print(f"{key}: {value}")
+    print("\n--- Validation result ---")
+    print("Status:", result["status"])
+    print("Issues:", result["issues"] if result["issues"] else "None")
+    if result["email_draft"]:
+        d = result["email_draft"]
+        print("\n--- Email draft (NOT sent) ---")
+        print("To:", d.to, "| CC:", d.cc)
+        print("Subject:", d.subject)
+        print("Body:", d.body)
+        print("Attachment:", d.attachment_filename)
+    else:
+        print("\nNo email drafted.")
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python3 run_invoice.py <path_to_invoice.pdf>")
         sys.exit(1)
-    run(sys.argv[1])
+    run_from_terminal(sys.argv[1])
