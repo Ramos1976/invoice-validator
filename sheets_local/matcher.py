@@ -49,3 +49,13 @@ def find_record(records: list[dict], tester_name: str, month: str) -> dict | Non
             return r
 
     return None
+
+def check_duplicate(record: dict, invoice_number: str) -> str | None:
+    """Flags if this exact invoice number is already recorded for this
+    tester/month — i.e. this invoice may already have been processed."""
+    if record is None:
+        return None  # nothing to compare against
+    sheet_invoice_number = record["invoice_number"].strip()
+    if sheet_invoice_number and sheet_invoice_number == invoice_number.strip():
+        return f"Possible duplicate: invoice #{invoice_number} is already recorded for this tester/month"
+    return None

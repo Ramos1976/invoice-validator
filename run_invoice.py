@@ -5,7 +5,7 @@ from extraction.parsers import tester_1_parser, tester_2_parser
 from validation import rules, normalizers as norm
 from validation.decision import decide, Status
 from sheets_local.loader import parse_tester_month_records
-from sheets_local.matcher import find_record, check_against_sheet
+from sheets_local.matcher import find_record, check_against_sheet, check_duplicate
 from mailer.draft_builder import build_draft
 from audit.db import get_connection, log_run
 
@@ -81,14 +81,19 @@ def run(pdf_path: str):
                 continue
             record = find_record(sheet_records, tester_name, month)
             issues.extend(check_against_sheet(record, fields["invoice_number"], item["amount"]))
+            duplicate_issue = check_duplicate(record, fields["invoice_number"])
+            if duplicate_issue:
+                issues.append(duplicate_issue)
     else:
         month = extract_month(fields.get("description_block", "")) or "Jan"
         record = find_record(sheet_records, tester_name, month)
         issues.extend(check_against_sheet(record, fields["invoice_number"], fields["total"]))
+        duplicate_issue = check_duplicate(record, fields["invoice_number"])
+        if duplicate_issue:
+            issues.append(duplicate_issue)
 
     issues = [i for i in issues if i is not None]
     issues = list(dict.fromkeys(issues))  # removes exact duplicates, keeps order
-    issues = [i for i in issues if i is not None]
     status, final_issues = decide(issues)
 
     print("\n--- Validation result ---")

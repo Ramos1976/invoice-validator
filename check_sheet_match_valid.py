@@ -4,6 +4,7 @@ from validation import rules, normalizers as norm
 from validation.decision import decide
 from sheets_local.loader import parse_tester_month_records
 from sheets_local.matcher import find_record, check_against_sheet
+from sheets_local.matcher import find_record, check_against_sheet, check_duplicate
 
 # Typed invoice using Abimael's real, known-correct January numbers
 invoice_text = """INVOICE
@@ -54,6 +55,10 @@ if fields:
     month = "Jan"  # from the line item description
     record = find_record(sheet_records, tester_name, month)
     sheet_issues = check_against_sheet(record, fields["invoice_number"], fields["line_items"][0]["amount"])
+    duplicate_issue = check_duplicate(record, fields["invoice_number"])
+    if duplicate_issue:
+        issues.append(duplicate_issue)
+        
     issues.extend(sheet_issues)
 
     issues = [i for i in issues if i is not None]
