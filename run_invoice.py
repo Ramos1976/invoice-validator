@@ -1,4 +1,6 @@
 import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from extraction.pdf_reader import read_pdf_text
 from extraction.template_detector import detect_template
 from extraction.parsers import tester_1_parser, tester_2_parser
