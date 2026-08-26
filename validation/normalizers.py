@@ -22,23 +22,23 @@ def normalize_amount(raw: str) -> float:
     if raw is None:
         return None
     cleaned = re.sub(r"[^\d,.\-]", "", raw)
-    # Handle European (1.234,56) vs US (1,234.56) formats
     if "," in cleaned and "." in cleaned:
         if cleaned.rfind(",") > cleaned.rfind("."):
             cleaned = cleaned.replace(".", "").replace(",", ".")
         else:
             cleaned = cleaned.replace(",", "")
     elif "," in cleaned:
-        # Ambiguous: could be thousands sep or decimal sep.
-        # Heuristic: if exactly 2 digits after last comma, treat as decimal.
         parts = cleaned.split(",")
         cleaned = cleaned.replace(",", ".") if len(parts[-1]) == 2 else cleaned.replace(",", "")
     return float(cleaned)
 
 def normalize_date(raw: str) -> datetime.date:
-    """Try common formats; raise ValueError if none match — an unparseable
-    date should surface as REVIEW_REQUIRED, never be silently guessed."""
-    formats = ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%d.%m.%Y"]
+    """Try common formats; raise ValueError if none match or if missing —
+    an unparseable or absent date should surface as REVIEW_REQUIRED,
+    never be silently guessed."""
+    if raw is None:
+        raise ValueError("Date is missing")
+    formats = ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d-%b-%Y"]
     for fmt in formats:
         try:
             return datetime.strptime(raw.strip(), fmt).date()
@@ -52,12 +52,3 @@ def normalize_text(raw: str) -> str:
     if raw is None:
         return ""
     return re.sub(r"\s+", " ", raw.strip()).lower()
-
-def normalize_date(raw: str) -> datetime.date:
-    formats = ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d-%b-%Y"]
-    for fmt in formats:
-        try:
-            return datetime.strptime(raw.strip(), fmt).date()
-        except ValueError:
-            continue
-    raise ValueError(f"Unrecognized date format: {raw!r}")
