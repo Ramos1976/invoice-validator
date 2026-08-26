@@ -15,8 +15,8 @@ def parse(text: str) -> dict:
 
     total = re.search(r"Total\s*€?\s*([\d.,]+)", text)
 
-    tester_name = re.search(r"\n([A-Z][a-zA-Z]+ [A-Z][a-zA-Z]+)\s*\n\s*\d", text)
-
+    tester_name = re.search(r"\n([A-Z][a-zA-Z]+ [A-Z][a-zA-Z]+)\s+Payment Details", text)
+        
     iban = re.search(r"IBAN:\s*(\S+)", text)
     swift = re.search(r"SWIFT:\s*(\S+)", text)
 

@@ -3,7 +3,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from extraction.pdf_reader import read_pdf_text
 from extraction.template_detector import detect_template
-from extraction.parsers import tester_1_parser, tester_2_parser
+from extraction.parsers import tester_1_parser, tester_2_parser, tester_3_parser
 from validation import rules, normalizers as norm
 from validation.decision import decide, Status
 from sheets_local.loader import parse_tester_month_records
@@ -56,7 +56,12 @@ def process_invoice(pdf_path: str, tester_name_override: str | None = None) -> d
         log_run(conn, None, None, status.value, final_issues, "N/A")
         return result
 
-    fields = tester_1_parser.parse(invoice_text) if template == "tester_1" else tester_2_parser.parse(invoice_text)
+    if template == "tester_1":
+        fields = tester_1_parser.parse(invoice_text)
+    elif template == "tester_2":
+        fields = tester_2_parser.parse(invoice_text)
+    elif template == "tester_3":
+        fields = tester_3_parser.parse(invoice_text)
     result["fields"] = fields
 
     issues = []
@@ -99,8 +104,15 @@ def process_invoice(pdf_path: str, tester_name_override: str | None = None) -> d
             dup = check_duplicate(record, fields["invoice_number"])
             if dup:
                 issues.append(dup)
-    else:
+    elif template == "tester_2":
         month = extract_month(fields.get("description_block", "")) or "Jan"
+        record = find_record(sheet_records, tester_name, month)
+        issues.extend(check_against_sheet(record, fields["invoice_number"], fields["total"]))
+        dup = check_duplicate(record, fields["invoice_number"])
+        if dup:
+            issues.append(dup)
+    elif template == "tester_3":
+        month = invoice_date.strftime("%b") if invoice_date else "Jan"
         record = find_record(sheet_records, tester_name, month)
         issues.extend(check_against_sheet(record, fields["invoice_number"], fields["total"]))
         dup = check_duplicate(record, fields["invoice_number"])
