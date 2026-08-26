@@ -52,3 +52,12 @@ def normalize_text(raw: str) -> str:
     if raw is None:
         return ""
     return re.sub(r"\s+", " ", raw.strip()).lower()
+
+def normalize_date(raw: str) -> datetime.date:
+    formats = ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d-%b-%Y"]
+    for fmt in formats:
+        try:
+            return datetime.strptime(raw.strip(), fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Unrecognized date format: {raw!r}")
