@@ -6,6 +6,11 @@ def parse(text: str) -> dict:
     due_date = re.search(r"Supplier\s+Job\s+Due Date\s*\n.*?(\d{2}/\d{2}/\d{4})", text)
     addressee = re.search(r"To\s+(.*?)\n(.*?)\nSupplier\s+Job\s+Due Date", text, re.DOTALL)
 
+    tester_name = re.search(
+        r"Supplier\s+Job\s+Due Date\s*\n(.*?)\s+(?:Latvia|Lithuania|Sweden|UK|United Kingdom|Bank Consultant|Test accounts|Personal)",
+        text,
+    )
+
     line_items = []
     for m in re.finditer(
         r"^\d+\s+(?P<description>(?:Maintenance|Opening)[-\s].*?)\s+"
@@ -29,6 +34,7 @@ def parse(text: str) -> dict:
         "due_date": due_date.group(1) if due_date else None,
         "approver_name": addressee.group(1).strip() if addressee else None,
         "company_block": addressee.group(2).strip() if addressee else None,
+        "tester_name": tester_name.group(1).strip() if tester_name else None,
         "line_items": line_items,
         "total": total.group(1) if total else None,
         "bank_details": {

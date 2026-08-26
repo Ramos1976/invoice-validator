@@ -66,7 +66,11 @@ def run(pdf_path: str):
         issues.append(rules.check_line_items_sum_to_total(fields["line_items"], fields["total"]))
 
     # --- Spreadsheet check ---
-    tester_name = input("\nEnter tester name as it appears in the sheet (Name on Invoice/Salary): ").strip()
+    tester_name = fields.get("tester_name")
+    if not tester_name:
+        tester_name = input("\nCould not extract tester name automatically. Please enter it manually: ").strip()
+    else:
+        print(f"\nExtracted tester name: {tester_name}")
     sheet_records = parse_tester_month_records(SHEET_CSV_PATH)
 
     if template == "tester_1":

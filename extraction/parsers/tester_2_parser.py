@@ -6,6 +6,11 @@ def parse(text: str) -> dict:
     due_date = re.search(r"Supplier\s+Job\s+Due Date\s*\n.*?(\d{2}/\d{2}/\d{4})", text)
     addressee = re.search(r"To\s+c/o\s+(.*?)\n(.*?)\nSupplier\s+Job\s+Due Date", text, re.DOTALL)
 
+    tester_name = re.search(
+        r"Supplier\s+Job\s+Due Date\s*\n(.*?)\s+(?:Test accounts|Personal|Latvia|Lithuania)",
+        text,
+    )
+
     # Description block sits between the header row and "VAT" or "Total"
     desc_block = re.search(
         r"Qty\s+Description\s+Unit Price\s+Line\s*\n(.*?)\n\s*VAT",
@@ -22,6 +27,7 @@ def parse(text: str) -> dict:
         "due_date": due_date.group(1) if due_date else None,
         "approver_name": addressee.group(1).strip() if addressee else None,
         "company_block": addressee.group(2).strip() if addressee else None,
+        "tester_name": tester_name.group(1).strip() if tester_name else None,
         "description_block": desc_block.group(1).strip() if desc_block else None,
         "total": total.group(1) if total else None,
         "bank_details": {
