@@ -3,8 +3,13 @@ import re
 def parse(text: str) -> dict:
     invoice_number = re.search(r"INVOICE\s+(\S+)\s*\n", text)
     invoice_date = re.search(r"Date:\s*(\d{2}/\d{2}/\d{4})", text)
-    due_date = re.search(r"Supplier\s+Job\s+Due Date\s*\n.*?(\d{2}/\d{2}/\d{4})", text)
-    addressee = re.search(r"To\s+c/o\s+(.*?)\n(.*?)\nSupplier\s+Job\s+Due Date", text, re.DOTALL)
+    due_date = re.search(
+        r"Supplier\s+Job\s+Due\s+[Dd]ate\s*\n.*?(\d{1,2}[-/]\d{1,2}[-/]\d{4})", text
+    )
+    addressee = re.search(
+        r"To\s+(?:c/o\s+)?(?:To\s+)?(.*?)\n(.*?)\nSupplier\s+Job\s+Due\s+[Dd]ate",
+        text, re.DOTALL,
+    )
 
     tester_name = re.search(
         r"Supplier\s+Job\s+Due Date\s*\n(.*?)\s+(?:Test accounts|Personal|Latvia|Lithuania)",
