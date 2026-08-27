@@ -13,4 +13,6 @@ for f in files:
     fields = tester_2_parser.parse(text)
     print("due_date:", fields["due_date"])
     print("approver_name:", fields["approver_name"])
+    print("total:", fields["total"])
+    print("bank_details:", fields["bank_details"])
     print()

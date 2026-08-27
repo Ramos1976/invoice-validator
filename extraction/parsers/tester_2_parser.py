@@ -21,10 +21,13 @@ def parse(text: str) -> dict:
         r"Qty\s+Description\s+Unit Price\s+Line\s*\n(.*?)\n\s*VAT",
         text, re.DOTALL,
     )
-    total = re.search(r"Total\s+([\d.,]+)\s*EUR", text)
-    iban = re.search(r"IBAN\s*(\S+)", text)
-    bic = re.search(r"BIC\s*(\S+)", text)
-
+    total = re.search(r"Total\s*\n?\s*([\d.,]+)\s*EUR", text) or re.search(
+        r"([\d.,]+)\s*EUR\s*\n\s*Total", text
+    )
+    iban = re.search(
+        r"IBAN:?\s*\n?\s*([A-Z0-9][A-Z0-9 ]*?)(?=\s*(?:BIC|SWIFT|\n|$))", text
+    )
+    bic = re.search(r"(?:BIC|SWIFT)\s*(?:/\s*Swift)?:?\s*\n?\s*([A-Z0-9]{3,11})", text)
     return {
         "template": "tester_2",
         "invoice_number": invoice_number.group(1) if invoice_number else None,
