@@ -28,6 +28,22 @@ def extract_month(description: str) -> str | None:
             return canonical
     return None
 
+def extract_months(description: str) -> list[str]:
+    """Returns every month mentioned in the description, in the order they
+    appear. A description like 'July-August' or 'Jul-Aug' returns both,
+    without duplicating a month matched by more than one keyword (e.g.
+    'jul' and 'july' both matching the same word)."""
+    text = description.lower()
+    seen_canonicals = set()
+    found = []
+    for key, canonical in MONTH_MAP.items():
+        if key in text and canonical not in seen_canonicals:
+            pos = text.find(key)
+            found.append((pos, canonical))
+            seen_canonicals.add(canonical)
+    found.sort()
+    return [canonical for _, canonical in found]
+
 def process_invoice(pdf_path: str, tester_name_override: str | None = None) -> dict:
     """Runs the full pipeline and returns a result dict instead of printing.
     tester_name_override lets a caller (like the UI) supply a name when
@@ -94,10 +110,10 @@ def process_invoice(pdf_path: str, tester_name_override: str | None = None) -> d
     sheet_records = parse_tester_month_records(SHEET_CSV_PATH)
 
     if template == "tester_1":
-        monthly_totals: dict[str, float] = {}
+        grouped: dict[tuple, float] = {}
         for item in fields["line_items"]:
-            month = extract_month(item["description"])
-            if month is None:
+            months = extract_months(item["description"])
+            if not months:
                 issues.append(f"Could not determine month for line item: {item['description']}")
                 continue
             try:
@@ -105,9 +121,22 @@ def process_invoice(pdf_path: str, tester_name_override: str | None = None) -> d
             except (ValueError, TypeError):
                 issues.append(f"Could not parse amount for line item: {item['description']}")
                 continue
-            monthly_totals[month] = monthly_totals.get(month, 0) + amount
+            key = tuple(months)
+            grouped[key] = grouped.get(key, 0) + amount
 
-        for month, summed_amount in monthly_totals.items():
+        for months, summed_amount in grouped.items():
+            if len(months) > 1:
+                issues.append(f"Invoice covers {len(months)} months ({'-'.join(months)})")
+                target_month = None
+                for m in months:
+                    rec = find_record(sheet_records, tester_name, m)
+                    if rec and rec["invoice_number"].strip() == fields["invoice_number"].strip():
+                        target_month = m
+                        break
+                month = target_month or months[-1]
+            else:
+                month = months[0]
+
             record = find_record(sheet_records, tester_name, month)
             issues.extend(check_against_sheet(record, fields["invoice_number"], str(summed_amount)))
             dup = check_duplicate(record, fields["invoice_number"])
