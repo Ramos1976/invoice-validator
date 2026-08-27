@@ -94,13 +94,22 @@ def process_invoice(pdf_path: str, tester_name_override: str | None = None) -> d
     sheet_records = parse_tester_month_records(SHEET_CSV_PATH)
 
     if template == "tester_1":
+        monthly_totals: dict[str, float] = {}
         for item in fields["line_items"]:
             month = extract_month(item["description"])
             if month is None:
                 issues.append(f"Could not determine month for line item: {item['description']}")
                 continue
+            try:
+                amount = norm.normalize_amount(item["amount"])
+            except (ValueError, TypeError):
+                issues.append(f"Could not parse amount for line item: {item['description']}")
+                continue
+            monthly_totals[month] = monthly_totals.get(month, 0) + amount
+
+        for month, summed_amount in monthly_totals.items():
             record = find_record(sheet_records, tester_name, month)
-            issues.extend(check_against_sheet(record, fields["invoice_number"], item["amount"]))
+            issues.extend(check_against_sheet(record, fields["invoice_number"], str(summed_amount)))
             dup = check_duplicate(record, fields["invoice_number"])
             if dup:
                 issues.append(dup)

@@ -33,15 +33,13 @@ def normalize_amount(raw: str) -> float:
     return float(cleaned)
 
 def normalize_date(raw: str) -> datetime.date:
-    """Try common formats; raise ValueError if none match or if missing —
-    an unparseable or absent date should surface as REVIEW_REQUIRED,
-    never be silently guessed."""
     if raw is None:
         raise ValueError("Date is missing")
-    formats = ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d-%b-%Y"]
+    cleaned = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", raw.strip())  # "29th" -> "29"
+    formats = ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d-%b-%Y", "%B %d, %Y"]
     for fmt in formats:
         try:
-            return datetime.strptime(raw.strip(), fmt).date()
+            return datetime.strptime(cleaned, fmt).date()
         except ValueError:
             continue
     raise ValueError(f"Unrecognized date format: {raw!r}")

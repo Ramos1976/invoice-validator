@@ -3,7 +3,9 @@ from extraction.parsers.tester_1_parser import extract_tester_name
 
 def parse(text: str) -> dict:
     invoice_number = re.search(r"INVOICE\s+(\S+)\s*\n", text)
-    invoice_date = re.search(r"Date:\s*(\d{2}/\d{2}/\d{4})", text)
+    invoice_date = re.search(r"Date:\s*(\d{2}/\d{2}/\d{4})", text) or re.search(
+        r"Date:\s*([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?,\s*\d{4})", text
+    )
     due_date = re.search(
         r"Supplier\s+Job\s+Due\s+[Dd]ate\s*\n.*?(\d{1,2}[-/]\d{1,2}[-/]\d{4})", text
     )

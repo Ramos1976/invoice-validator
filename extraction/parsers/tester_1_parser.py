@@ -6,6 +6,31 @@ HEADER_CONTINUATION_WORDS = {
 }
 
 
+def _rejoin_wrapped_lines(text: str) -> str:
+    """Fixes PDF text where a line-item description wraps onto its own line
+    without a leading number, followed by a line that starts with the number
+    and amounts. Rebuilds them in the correct order: number, description,
+    amounts — matching what the main line-item regex expects."""
+    lines = text.split("\n")
+    fixed_lines = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if (
+            re.match(r"^(Maintenance|Opening)[-\s]", line.strip())
+            and i + 1 < len(lines)
+        ):
+            next_match = re.match(r"^(\d+)\s+(.*)", lines[i + 1].strip())
+            if next_match:
+                number, amounts = next_match.groups()
+                fixed_lines.append(f"{number} {line.strip()} {amounts}")
+                i += 2
+                continue
+        fixed_lines.append(line)
+        i += 1
+    return "\n".join(fixed_lines)
+
+
 def find_data_line(text: str) -> str | None:
     """Finds the header line (contains 'Supplier' and 'Job'), then scans
     forward past any header-continuation lines (e.g. 'Due Date', 'days
@@ -83,10 +108,14 @@ def extract_addressee(text: str) -> tuple[str | None, str | None]:
 
 
 def parse(text: str) -> dict:
+    text = _rejoin_wrapped_lines(text)
+
     invoice_number = re.search(r"INVOICE\s+No\.?\s*(\S+)", text) or re.search(
         r"INVOICE\s+(\d+)\s*\n", text
     )
-    invoice_date = re.search(r"Date:\s*(\d{2}/\d{2}/\d{4})", text)
+    invoice_date = re.search(r"Date:\s*(\d{2}/\d{2}/\d{4})", text) or re.search(
+        r"Date:\s*([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?,\s*\d{4})", text
+    )
 
     due_date = extract_due_date(text)
     approver_name, company_block = extract_addressee(text)
@@ -100,7 +129,7 @@ def parse(text: str) -> dict:
         text, re.MULTILINE,
     ):
         unit_price = m.group("unit_price")
-        amount = m.group("amount") or unit_price  # only one number on the line? use it for both
+        amount = m.group("amount") or unit_price
         line_items.append({
             "description": m.group("description").strip(),
             "unit_price": unit_price,
@@ -109,7 +138,7 @@ def parse(text: str) -> dict:
 
     total = re.search(r"Total\s+([\d.,]+)\s*EUR", text)
     iban = re.search(r"IBAN:?\s*(\S+)", text)
-    bic = re.search(r"BIC\s*/?\s*Swift\s*Code:?\s*(\S+)", text, re.IGNORECASE)
+    bic = re.search(r"BIC\s*/?\s*Swift\s*(?:Code)?:?\s*(\S+)", text, re.IGNORECASE)
 
     return {
         "template": "tester_1",
