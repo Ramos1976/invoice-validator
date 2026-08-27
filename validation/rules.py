@@ -44,9 +44,9 @@ def check_addressee(approver_name_raw: str) -> str | None:
     return None
 
 def check_description_pattern(description_raw: str) -> str | None:
-    pattern = r"(maintenance|opening)\s*-\s*\S.*-\s*\S"
-    if not _re.match(pattern, description_raw.strip(), _re.IGNORECASE):
-        return f"Description '{description_raw}' does not match the expected 'Maintenance/Opening - Month - Bank' pattern"
+    text = norm.normalize_text(description_raw)
+    if not (text.startswith("maintenance") or text.startswith("opening")):
+        return f"Description '{description_raw}' does not start with 'Maintenance' or 'Opening'"
     return None
 
 def check_amount(invoice_amount_raw: str, expected_amount: float, tolerance_abs: float = 0.01) -> str | None:
