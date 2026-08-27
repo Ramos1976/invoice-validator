@@ -1,4 +1,5 @@
 import re
+from extraction.parsers.tester_1_parser import extract_tester_name
 
 def parse(text: str) -> dict:
     invoice_number = re.search(r"INVOICE\s+(\S+)\s*\n", text)
@@ -11,23 +12,24 @@ def parse(text: str) -> dict:
         text, re.DOTALL,
     )
 
-    tester_name = re.search(
-        r"Supplier\s+Job\s+Due Date\s*\n(.*?)\s+(?:Test accounts|Personal|Latvia|Lithuania)",
-        text,
-    )
+    tester_name = extract_tester_name(text)
 
-    # Description block sits between the header row and "VAT" or "Total"
     desc_block = re.search(
-        r"Qty\s+Description\s+Unit Price\s+Line\s*\n(.*?)\n\s*VAT",
+        r"Qty\s+Description\s+Unit Price\s+Line(?:\s+Total)?\s*\n(.*?)\n\s*(?:TAX/VAT|VAT)",
         text, re.DOTALL,
     )
+
     total = re.search(r"Total\s*\n?\s*([\d.,]+)\s*EUR", text) or re.search(
         r"([\d.,]+)\s*EUR\s*\n\s*Total", text
     )
+
     iban = re.search(
         r"IBAN:?\s*\n?\s*([A-Z0-9][A-Z0-9 ]*?)(?=\s*(?:BIC|SWIFT|\n|$))", text
     )
-    bic = re.search(r"(?:BIC|SWIFT)\s*(?:/\s*Swift)?:?\s*\n?\s*([A-Z0-9]{3,11})", text)
+    bic = re.search(
+        r"(?:BIC|SWIFT)\s*(?:/\s*Swift)?:?\s*\n?\s*([A-Z0-9]{3,11})", text
+    )
+
     return {
         "template": "tester_2",
         "invoice_number": invoice_number.group(1) if invoice_number else None,
@@ -35,7 +37,7 @@ def parse(text: str) -> dict:
         "due_date": due_date.group(1) if due_date else None,
         "approver_name": addressee.group(1).strip() if addressee else None,
         "company_block": addressee.group(2).strip() if addressee else None,
-        "tester_name": tester_name.group(1).strip() if tester_name else None,
+        "tester_name": tester_name,
         "description_block": desc_block.group(1).strip() if desc_block else None,
         "total": total.group(1) if total else None,
         "bank_details": {
