@@ -44,9 +44,13 @@ def check_addressee(approver_name_raw: str) -> str | None:
     return None
 
 def check_description_pattern(description_raw: str) -> str | None:
+    """Loosened deliberately: real invoices use many different phrasings
+    ('Maintenance', 'Opening', 'Monthly Commission', etc.), so we only check
+    that the description looks like real text, not specific keywords. The
+    spreadsheet amount comparison is the real safety net for correctness."""
     text = norm.normalize_text(description_raw)
-    if not (text.startswith("maintenance") or text.startswith("opening")):
-        return f"Description '{description_raw}' does not start with 'Maintenance' or 'Opening'"
+    if not text or not text[0].isalpha():
+        return f"Description '{description_raw}' does not look like a valid service description"
     return None
 
 def check_amount(invoice_amount_raw: str, expected_amount: float, tolerance_abs: float = 0.01) -> str | None:

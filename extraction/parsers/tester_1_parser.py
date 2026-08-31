@@ -7,6 +7,10 @@ HEADER_CONTINUATION_WORDS = {
 
 
 def _rejoin_wrapped_lines(text: str) -> str:
+    """Fixes PDF text where a line-item description wraps onto its own line
+    without a leading number, followed by a line that starts with the number
+    and amounts. Rebuilds them in the correct order: number, description,
+    amounts — matching what the main line-item regex expects."""
     lines = text.split("\n")
     fixed_lines = []
     i = 0
@@ -42,7 +46,35 @@ def _parse_single_line_header(text: str) -> dict:
     return {"tester_name": m.group("name").strip(), "due_date": m.group("due")}
 
 
+def extract_invoice_date(text: str) -> str | None:
+    """Tries labeled 'Date:' formats first (slash, dot, or written-out month).
+    The (?<!Due ) lookbehind avoids accidentally matching inside 'Due Date:',
+    which literally contains the substring 'Date:'. Falls back to a bare
+    date-only line with no label at all, appearing before the 'To' line —
+    some invoices state the date with no 'Date:' label whatsoever."""
+    m = (
+        re.search(r"(?<!Due )Date:\s*(\d{2}/\d{2}/\d{4})", text)
+        or re.search(r"(?<!Due )Date:\s*(\d{2}\.\d{2}\.\d{4})", text)
+        or re.search(r"(?<!Due )Date:\s*([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?,?\s*\d{4})", text)
+    )
+    if m:
+        return m.group(1)
+
+    lines = text.split("\n")
+    for line in lines:
+        if re.match(r"^To:?\s", line.strip()):
+            break
+        bare = re.match(r"^(\d{1,2}[/.]\d{1,2}[/.]\d{4})$", line.strip())
+        if bare:
+            return bare.group(1)
+    return None
+
+
 def find_data_line(text: str) -> str | None:
+    """Finds the header line (contains 'Supplier' and 'Job'), then scans
+    forward past any header-continuation lines (e.g. 'Due Date', 'days
+    after date sent', 'Payment Terms'), returning the first real data line
+    — the one with the tester's name, country/job, and due date."""
     lines = text.split("\n")
     header_idx = None
     for i, line in enumerate(lines):
@@ -120,19 +152,12 @@ def extract_addressee(text: str) -> tuple[str | None, str | None]:
 
 def parse(text: str) -> dict:
     text = _rejoin_wrapped_lines(text)
+    text = text.replace("●", "").replace("•", "")
 
     invoice_number = re.search(r"INVOICE\s+No\.?\s*(\S+)", text) or re.search(
         r"INVOICE\s+(\d+)\s*\n", text
     )
-
-    # (?<!Due ) prevents accidentally matching inside "Due Date:", which
-    # literally contains the substring "Date:" — a real bug we hit today.
-    invoice_date = (
-        re.search(r"(?<!Due )Date:\s*(\d{2}/\d{2}/\d{4})", text)
-        or re.search(r"(?<!Due )Date:\s*(\d{2}\.\d{2}\.\d{4})", text)
-        or re.search(r"(?<!Due )Date:\s*([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?,?\s*\d{4})", text)
-    )
-
+    invoice_date = extract_invoice_date(text)
     due_date = extract_due_date(text)
     approver_name, company_block = extract_addressee(text)
     tester_name = extract_tester_name(text)
@@ -156,7 +181,7 @@ def parse(text: str) -> dict:
         r"Total\s+([\d.,]+)\s*EUR", text
     )
     iban = re.search(
-        r"IBAN:?\s*\n?\s*([A-Z0-9][A-Z0-9 ]*?)(?=\s*(?:BIC|SWIFT|\n|$))", text
+        r"IBAN:?\s*\n?\s*([A-Z0-9][A-Z0-9 ]*?)(?=\s*(?:BIC|SWIFT|/|\n|$))", text
     )
     bic = re.search(
         r"(?:BIC|SWIFT)(?:\s*/?\s*Swift)?(?:\s*Code)?:?\s*\n?\s*([A-Z0-9]{3,11})",
@@ -166,7 +191,7 @@ def parse(text: str) -> dict:
     return {
         "template": "tester_1",
         "invoice_number": invoice_number.group(1) if invoice_number else None,
-        "invoice_date": invoice_date.group(1) if invoice_date else None,
+        "invoice_date": invoice_date,
         "due_date": due_date,
         "approver_name": approver_name,
         "company_block": company_block,

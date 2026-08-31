@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from extraction.pdf_reader import read_pdf_text
 from extraction.template_detector import detect_template
@@ -23,24 +24,25 @@ MONTH_MAP = {
 }
 
 def extract_month(description: str) -> str | None:
+    """Only requires a word boundary BEFORE the key, not after — this lets
+    'aug' match inside 'August' (a longer real word), while still rejecting
+    'mar' matching inside the middle of 'Danmark' (no boundary before it)."""
     text = description.lower()
     for key, canonical in MONTH_MAP.items():
-        if key in text:
+        if re.search(rf"\b{re.escape(key)}", text):
             return canonical
     return None
 
 def extract_months(description: str) -> list[str]:
     """Returns every month mentioned in the description, in the order they
-    appear. A description like 'July-August' or 'Jul-Aug' returns both,
-    without duplicating a month matched by more than one keyword (e.g.
-    'jul' and 'july' both matching the same word)."""
+    appear. See extract_month for why only a leading word boundary is used."""
     text = description.lower()
     seen_canonicals = set()
     found = []
     for key, canonical in MONTH_MAP.items():
-        if key in text and canonical not in seen_canonicals:
-            pos = text.find(key)
-            found.append((pos, canonical))
+        match = re.search(rf"\b{re.escape(key)}", text)
+        if match and canonical not in seen_canonicals:
+            found.append((match.start(), canonical))
             seen_canonicals.add(canonical)
     found.sort()
     return [canonical for _, canonical in found]
