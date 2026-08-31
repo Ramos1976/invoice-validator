@@ -36,7 +36,7 @@ def normalize_date(raw: str) -> datetime.date:
     if raw is None:
         raise ValueError("Date is missing")
     cleaned = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", raw.strip())  # "29th" -> "29"
-    formats = ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d-%b-%Y", "%B %d, %Y"]
+    formats = ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d-%b-%Y", "%B %d, %Y", "%B %d %Y"]
     for fmt in formats:
         try:
             return datetime.strptime(cleaned, fmt).date()

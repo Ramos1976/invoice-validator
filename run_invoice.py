@@ -8,13 +8,14 @@ from validation import rules, normalizers as norm
 from validation.decision import decide, Status
 from sheets_local.loader import parse_tester_month_records
 from sheets_local.matcher import find_record, check_against_sheet, check_duplicate
-from mailer.draft_builder import build_draft
+from mailer.draft_builder import build_draft, build_review_notification
 from audit.db import get_connection, log_run
 
 SHEET_CSV_PATH = "data/check_salaries_export.csv"
 AUDIT_DB_PATH = "data/audit.db"
 EMAIL_TO = "invoice@trustly.com"
 EMAIL_CC = "expansion@trustly.com"
+REVIEW_NOTIFICATION_TO = "expansion@trustly.com"
 
 MONTH_MAP = {
     "jan": "Jan", "feb": "Feb", "mar": "Mar", "apr": "Apr", "may": "May", "jun": "Jun",
@@ -57,6 +58,7 @@ def process_invoice(pdf_path: str, tester_name_override: str | None = None) -> d
         "status": None,
         "issues": [],
         "email_draft": None,
+        "review_notification": None,
     }
 
     invoice_text = read_pdf_text(pdf_path)
@@ -69,6 +71,14 @@ def process_invoice(pdf_path: str, tester_name_override: str | None = None) -> d
         status, final_issues = decide(["Unrecognized invoice template — manual review required"])
         result["status"] = status
         result["issues"] = final_issues
+        result["review_notification"] = build_review_notification(
+            invoice_number="UNKNOWN",
+            tester_name="UNKNOWN",
+            template=template,
+            issues=final_issues,
+            pdf_filename=pdf_path,
+            to=REVIEW_NOTIFICATION_TO,
+        )
         log_run(conn, None, None, status.value, final_issues, "N/A")
         return result
 
@@ -174,6 +184,15 @@ def process_invoice(pdf_path: str, tester_name_override: str | None = None) -> d
             cc=EMAIL_CC,
         )
         result["email_draft"] = draft
+    elif status != Status.VALID:
+        result["review_notification"] = build_review_notification(
+            invoice_number=fields["invoice_number"],
+            tester_name=tester_name,
+            template=template,
+            issues=final_issues,
+            pdf_filename=pdf_path,
+            to=REVIEW_NOTIFICATION_TO,
+        )
 
     log_run(conn, fields["invoice_number"], tester_name, status.value, final_issues, tester_name)
     return result
@@ -197,13 +216,22 @@ def run_from_terminal(pdf_path: str):
     print("\n--- Validation result ---")
     print("Status:", result["status"])
     print("Issues:", result["issues"] if result["issues"] else "None")
+
     if result["email_draft"]:
         d = result["email_draft"]
         print("\n--- Email draft (NOT sent) ---")
         print("To:", d.to, "| CC:", d.cc)
         print("Subject:", d.subject)
-        print("Body:", d.body)
+        print("Body:", repr(d.body))
         print("Attachment:", d.attachment_filename)
+    elif result["review_notification"]:
+        n = result["review_notification"]
+        print("\n--- Review notification draft (NOT sent) ---")
+        print("To:", n.to)
+        print("Subject:", n.subject)
+        print("Body:")
+        print(n.body)
+        print("Attachment:", n.attachment_filename)
     else:
         print("\nNo email drafted.")
 

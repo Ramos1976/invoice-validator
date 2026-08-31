@@ -1,1 +1,1 @@
-streamlit run yourscript.py to run the program
+#### streamlit run ui/app.py ### to run the program

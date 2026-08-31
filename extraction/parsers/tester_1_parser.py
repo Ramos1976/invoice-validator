@@ -7,10 +7,6 @@ HEADER_CONTINUATION_WORDS = {
 
 
 def _rejoin_wrapped_lines(text: str) -> str:
-    """Fixes PDF text where a line-item description wraps onto its own line
-    without a leading number, followed by a line that starts with the number
-    and amounts. Rebuilds them in the correct order: number, description,
-    amounts — matching what the main line-item regex expects."""
     lines = text.split("\n")
     fixed_lines = []
     i = 0
@@ -31,11 +27,22 @@ def _rejoin_wrapped_lines(text: str) -> str:
     return "\n".join(fixed_lines)
 
 
+def _parse_single_line_header(text: str) -> dict:
+    """Handles headers written entirely on one line with inline colons, e.g.
+    'Supplier: Christian Hansen Job: DANISH ACCOUNTS (7) Due Date: 14/09/2026'
+    — a different shape than the two-line 'Supplier Job \\n Name Country ...'
+    header our other logic expects."""
+    m = re.search(
+        r"Supplier:\s*(?P<name>.*?)\s+Job:\s*(?P<job>.*?)\s+Due\s*Date:\s*"
+        r"(?P<due>\d{1,2}[-/]\d{1,2}[-/]\d{4})",
+        text,
+    )
+    if not m:
+        return {}
+    return {"tester_name": m.group("name").strip(), "due_date": m.group("due")}
+
+
 def find_data_line(text: str) -> str | None:
-    """Finds the header line (contains 'Supplier' and 'Job'), then scans
-    forward past any header-continuation lines (e.g. 'Due Date', 'days
-    after date sent', 'Payment Terms'), returning the first real data line
-    — the one with the tester's name, country/job, and due date."""
     lines = text.split("\n")
     header_idx = None
     for i, line in enumerate(lines):
@@ -57,6 +64,10 @@ def find_data_line(text: str) -> str | None:
 
 
 def extract_tester_name(text: str) -> str | None:
+    single_line = _parse_single_line_header(text)
+    if single_line.get("tester_name"):
+        return single_line["tester_name"]
+
     line = find_data_line(text)
     if not line:
         return None
@@ -71,8 +82,10 @@ def extract_tester_name(text: str) -> str | None:
 
 
 def extract_due_date(text: str) -> str | None:
-    """The due date is the date-shaped value on the same data line as the
-    tester's name — this avoids depending on the exact header wording."""
+    single_line = _parse_single_line_header(text)
+    if single_line.get("due_date"):
+        return single_line["due_date"]
+
     line = find_data_line(text)
     if not line:
         return None
@@ -81,8 +94,6 @@ def extract_due_date(text: str) -> str | None:
 
 
 def extract_addressee(text: str) -> tuple[str | None, str | None]:
-    """Finds the 'To' line and captures everything after it, up to the
-    header line, as the approver name and company block."""
     lines = text.split("\n")
     to_idx = None
     approver_name = None
@@ -113,8 +124,13 @@ def parse(text: str) -> dict:
     invoice_number = re.search(r"INVOICE\s+No\.?\s*(\S+)", text) or re.search(
         r"INVOICE\s+(\d+)\s*\n", text
     )
-    invoice_date = re.search(r"Date:\s*(\d{2}/\d{2}/\d{4})", text) or re.search(
-        r"Date:\s*([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?,\s*\d{4})", text
+
+    # (?<!Due ) prevents accidentally matching inside "Due Date:", which
+    # literally contains the substring "Date:" — a real bug we hit today.
+    invoice_date = (
+        re.search(r"(?<!Due )Date:\s*(\d{2}/\d{2}/\d{4})", text)
+        or re.search(r"(?<!Due )Date:\s*(\d{2}\.\d{2}\.\d{4})", text)
+        or re.search(r"(?<!Due )Date:\s*([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?,?\s*\d{4})", text)
     )
 
     due_date = extract_due_date(text)
@@ -123,7 +139,7 @@ def parse(text: str) -> dict:
 
     line_items = []
     for m in re.finditer(
-        r"^\d+\s+(?P<description>(?:Maintenance|Opening)[-\s].*?)\s+"
+        r"^\d+\s+(?P<description>[A-Za-z].*?)\s+"
         r"€?€?\s*(?P<unit_price>[\d.,]+)\s*EUR"
         r"(?:\s+€?€?\s*(?P<amount>[\d.,]+)\s*EUR)?",
         text, re.MULTILINE,
@@ -136,9 +152,16 @@ def parse(text: str) -> dict:
             "amount": amount,
         })
 
-    total = re.search(r"Total\s+([\d.,]+)\s*EUR", text)
-    iban = re.search(r"IBAN:?\s*(\S+)", text)
-    bic = re.search(r"BIC\s*/?\s*Swift\s*(?:Code)?:?\s*(\S+)", text, re.IGNORECASE)
+    total = re.search(r"Total\s+EUR\s+([\d.,]+)", text) or re.search(
+        r"Total\s+([\d.,]+)\s*EUR", text
+    )
+    iban = re.search(
+        r"IBAN:?\s*\n?\s*([A-Z0-9][A-Z0-9 ]*?)(?=\s*(?:BIC|SWIFT|\n|$))", text
+    )
+    bic = re.search(
+        r"(?:BIC|SWIFT)(?:\s*/?\s*Swift)?(?:\s*Code)?:?\s*\n?\s*([A-Z0-9]{3,11})",
+        text, re.IGNORECASE,
+    )
 
     return {
         "template": "tester_1",

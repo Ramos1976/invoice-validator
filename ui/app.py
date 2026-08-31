@@ -58,7 +58,14 @@ if uploaded_file is not None:
         st.write(f"**Subject:** {d.subject}")
         st.text_area("Body", d.body, height=120)
         st.write(f"**Attachment:** {d.attachment_filename}")
+    elif result["review_notification"]:
+        st.subheader("Review notification draft (not sent)")
+        n = result["review_notification"]
+        st.write(f"**To:** {n.to}")
+        st.write(f"**Subject:** {n.subject}")
+        st.text_area("Body", n.body, height=200)
+        st.write(f"**Attachment:** {n.attachment_filename}")
     else:
-        st.info("No email drafted — flagged for manual review, nothing sent automatically.")
+        st.info("No email drafted.")
 
     os.unlink(tmp_path)  # clean up the temporary file
