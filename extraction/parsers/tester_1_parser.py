@@ -5,31 +5,28 @@ HEADER_CONTINUATION_WORDS = {
     "terms", "customer", "id",
 }
 
-
 def _rejoin_wrapped_lines(text: str) -> str:
     """Fixes PDF text where a line-item description wraps onto its own line
-    without a leading number, followed by a line that starts with the number
-    and amounts. Rebuilds them in the correct order: number, description,
-    amounts — matching what the main line-item regex expects."""
+    (with no leading number and no amount), followed by a line that starts
+    with just the number and the amounts. Works for any description text,
+    not just ones starting with 'Maintenance'/'Opening'."""
     lines = text.split("\n")
     fixed_lines = []
     i = 0
     while i < len(lines):
-        line = lines[i]
-        if (
-            re.match(r"^(Maintenance|Opening)[-\s]", line.strip())
-            and i + 1 < len(lines)
-        ):
-            next_match = re.match(r"^(\d+)\s+(.*)", lines[i + 1].strip())
-            if next_match:
-                number, amounts = next_match.groups()
-                fixed_lines.append(f"{number} {line.strip()} {amounts}")
+        line = lines[i].strip()
+        if i + 1 < len(lines):
+            next_line = lines[i + 1].strip()
+            next_match = re.match(r"^(\d+)\s+([\d.,]+\s*EUR.*)$", next_line)
+            looks_like_wrapped_description = bool(re.match(r"^[A-Za-z]", line)) and "EUR" not in line
+            if next_match and looks_like_wrapped_description:
+                number, rest = next_match.groups()
+                fixed_lines.append(f"{number} {line} {rest}")
                 i += 2
                 continue
-        fixed_lines.append(line)
+        fixed_lines.append(lines[i])
         i += 1
     return "\n".join(fixed_lines)
-
 
 def _parse_single_line_header(text: str) -> dict:
     """Handles headers written entirely on one line with inline colons, e.g.
@@ -124,7 +121,6 @@ def extract_due_date(text: str) -> str | None:
     match = re.search(r"(\d{1,2}[-/]\d{1,2}[-/]\d{4})", line)
     return match.group(1) if match else None
 
-
 def extract_addressee(text: str) -> tuple[str | None, str | None]:
     lines = text.split("\n")
     to_idx = None
@@ -136,7 +132,9 @@ def extract_addressee(text: str) -> tuple[str | None, str | None]:
             m = re.match(r"To:?\s+(\S.*)", line.strip())
             if m:
                 to_idx = i
-                approver_name = m.group(1).strip()
+                name = m.group(1).strip()
+                name = re.sub(r"^To:?\s+", "", name)  # strip a doubled "To"
+                approver_name = name
         if "Supplier" in line and "Job" in line:
             header_idx = i
             break
@@ -169,10 +167,13 @@ def parse(text: str) -> dict:
         r"(?:\s+€?€?\s*(?P<amount>[\d.,]+)\s*EUR)?",
         text, re.MULTILINE,
     ):
+        description = m.group("description").strip()
+        if description.lower() == "total":
+            continue
         unit_price = m.group("unit_price")
         amount = m.group("amount") or unit_price
         line_items.append({
-            "description": m.group("description").strip(),
+            "description": description,
             "unit_price": unit_price,
             "amount": amount,
         })

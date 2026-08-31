@@ -74,6 +74,8 @@ def check_line_items_sum_to_total(line_items: list[dict], total_raw: str, tolera
         total = norm.normalize_amount(total_raw)
     except (ValueError, TypeError, KeyError) as e:
         return f"Could not verify line items against total: {e}"
+    if total is None:
+        return "Could not verify line items against total: total amount is missing"
     if abs(line_sum - total) > tolerance_abs:
         return f"Line items sum to {line_sum}, but total states {total}"
     return None
