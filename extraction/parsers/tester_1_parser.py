@@ -134,6 +134,7 @@ def extract_addressee(text: str) -> tuple[str | None, str | None]:
                 to_idx = i
                 name = m.group(1).strip()
                 name = re.sub(r"^To:?\s+", "", name)  # strip a doubled "To"
+                name = re.sub(r"^c/o\s+", "", name, flags=re.IGNORECASE)  # strip a "c/o" prefix
                 approver_name = name
         if "Supplier" in line and "Job" in line:
             header_idx = i
