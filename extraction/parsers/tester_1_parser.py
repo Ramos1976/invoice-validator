@@ -44,13 +44,9 @@ def _parse_single_line_header(text: str) -> dict:
 
 
 def extract_invoice_date(text: str) -> str | None:
-    """Tries labeled 'Date:' formats first (slash, dot, or written-out month).
-    The (?<!Due ) lookbehind avoids accidentally matching inside 'Due Date:',
-    which literally contains the substring 'Date:'. Falls back to a bare
-    date-only line with no label at all, appearing before the 'To' line —
-    some invoices state the date with no 'Date:' label whatsoever."""
     m = (
-        re.search(r"(?<!Due )Date:\s*(\d{2}/\d{2}/\d{4})", text)
+        re.search(r"(?<!Due )Date:\s*(\d{4}-\d{2}-\d{2})", text)
+        or re.search(r"(?<!Due )Date:\s*(\d{2}/\d{2}/\d{4})", text)
         or re.search(r"(?<!Due )Date:\s*(\d{2}\.\d{2}\.\d{4})", text)
         or re.search(r"(?<!Due )Date:\s*([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?,?\s*\d{4})", text)
     )
@@ -118,7 +114,7 @@ def extract_due_date(text: str) -> str | None:
     line = find_data_line(text)
     if not line:
         return None
-    match = re.search(r"(\d{1,2}[-/]\d{1,2}[-/]\d{4})", line)
+    match = re.search(r"(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})", line)
     return match.group(1) if match else None
 
 def extract_addressee(text: str) -> tuple[str | None, str | None]:
